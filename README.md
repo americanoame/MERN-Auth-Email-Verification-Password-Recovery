@@ -1,1 +1,1 @@
-# MERN-Auth-Email-Verification-Password-Recovery-Welcome-Emails
+# MERN-Auth-Email-Verification-Password-Recovery
