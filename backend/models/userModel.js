@@ -28,10 +28,10 @@ const userSchema = mongoose.Schema({
         type: Boolean,
         default: false
     },
-    resetPassowrdToken: String,
-    resetPasswordExpire: Date,
+    resetPasswordToken: String,
+    resetPasswordExpiresAt: Date,
     verificationToken: String,
-    verificationTokenExpireAt: Date,
+    verificationTokenExpiresAt: Date,
     
 }, {
     timestamps: true
