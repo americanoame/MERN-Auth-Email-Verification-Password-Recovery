@@ -1,8 +1,9 @@
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import asyncHandler from "../middleware/asyncHandler.js";
-import { sendVerificationEmail } from "../mailtrap/emails.js";
+import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail } from "../mailtrap/emails.js";
 
 export const signup = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body; // get the name, email, and password from the request body
@@ -21,6 +22,7 @@ export const signup = asyncHandler(async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
     const verificationToken = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
@@ -53,62 +55,153 @@ export const signup = asyncHandler(async (req, res) => {
 });
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-  // create a new controller function called verifyEmail
-  const { code } = req.body; // get the verification code from the request body
+  const { code } = req.body;
+
   try {
+    console.log("Request token:", code);
+
     const user = await User.findOne({
-      // find the user with the verification token
-      verificationToken: code, // find the user with the verification token
-      verificationTokenExpiresAt: { $gt: Date.now() }, // check if the verification token has not expired yet
+      verificationToken: code,
+      verificationTokenExpiresAt: { $gt: Date.now() },
     });
 
     if (!user) {
-      // if the user is not found
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Invalid or expired verification code",
-        }); // return an error message
+      console.error(
+        `Verification failed: No user found with token "${code}" or token expired.`
+      );
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired verification code",
+      });
     }
 
-    user.isVerified = true; // set the user to verified
-    user.verificationToken = undefined; // remove the verification token from the user object so that it can't be used again
-    user.verificationTokenExpiresAt = undefined; // remove the verification token expiry date from the user object
-    await user.save(); // save the user object to the database
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    user.verificationTokenExpiresAt = undefined;
+    await user.save();
 
-    await sendWelcomeEmail(user.email, user.name); // send a welcome email to the user
+    await sendWelcomeEmail(user.email, user.name);
 
     res.status(200).json({
-      // return a success message
-      success: true, // set the success to true
+      success: true,
       message: "Email verified successfully",
       user: {
-        ...user._doc, // return all the fields in the user object
-        password: undefined, // remove the password from the user object before returning it to the client
+        ...user._doc,
+        password: undefined,
       },
     });
   } catch (error) {
-    // catch any errors that occur during the verification process
     console.log("error in verifyEmail ", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
+export const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid credentials" });
+    }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid credentials" });
+    }
+
+    generateTokenAndSetCookie(res, user._id);
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Logged in successfully",
+      user: {
+        ...user._doc,
+        password: undefined,
+      },
+    });
+  } catch (error) {
+    console.log("Error in login ", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+export const logout = asyncHandler(async (req, res) => {
+  res.clearCookie("token");
+  res.status(200).json({ message: "Logged out successfully" });
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    
+
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    const resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpiresAt = resetPasswordExpire;
+
+    await user.save();
+
+    await sendPasswordResetEmail(
+      user.email,
+      `${process.env.CLIENT_URL}/reset-password/${resetToken}`
+    );
+
+    res
+      .status(200)
+      .json({ success: true, message: "Password reset email sent" });
+  } catch (error) {
+    console.log("Error in forgotPassword ", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
 
 
+export const resetPassword = asyncHandler(async (req, res) => {
+  try {
+		const { token } = req.params;
+		const { password } = req.body;
 
+		const user = await User.findOne({
+			resetPasswordToken: token,
+			resetPasswordExpiresAt: { $gt: Date.now() },
+		});
 
+		if (!user) {
+			return res.status(400).json({ success: false, message: "Invalid or expired reset token" });
+		}
 
+		// update password
+		const hashedPassword = await bcrypt.hash(password, 10);
 
+		user.password = hashedPassword;
+		user.resetPasswordToken = undefined;
+		user.resetPasswordExpiresAt = undefined;
+		await user.save();
 
+		await sendResetSuccessEmail(user.email);
 
+		res.status(200).json({ success: true, message: "Password reset successful" });
+	} catch (error) {
+		console.log("Error in resetPassword ", error);
+		res.status(400).json({ success: false, message: error.message });
+	}
+});
 
-export const login = asyncHandler(async (req, res) => {});
-
-export const logout = asyncHandler(async (req, res) => {});
-
-export const forgotPassword = asyncHandler(async (req, res) => {});
-
-export const resetPassowrd = asyncHandler(async (req, res) => {});
