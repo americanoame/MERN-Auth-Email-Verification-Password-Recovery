@@ -14,7 +14,7 @@ const app = express();
 
 // Body parser middleware to parse the body of the request (req.body)
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true })); // to support URL-encoded bodies
 
 // Cookie parser middleware to parse the cookies from the request object
 // alows to acces reqest.cookies and since  the cookie is called JWT we can access it by req.cookies.JWT
