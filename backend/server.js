@@ -1,9 +1,12 @@
+// @ts-nocheck
+dotenv.config();
 import express from 'express';
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
-dotenv.config();
+
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
+import cors from "cors";
 
 
 const port = process.env.PORT || 9000;
@@ -11,6 +14,11 @@ const port = process.env.PORT || 9000;
 connectDB();
 
 const app = express();
+
+app.use(cors({
+  origin: "http://localhost:5173",
+  credentials: true,
+}));
 
 // Body parser middleware to parse the body of the request (req.body)
 app.use(express.json());
